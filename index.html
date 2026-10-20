@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pastor Verse Display</title>
+<style>
+:root{--bg:#14110d;--bg2:#2a2116;--fg:#f4ead5;--accent:#e0b64f;--muted:#a99b80;--rf:Georgia,'Times New Roman',serif;--vf:Georgia,'Times New Roman',serif;--bar:#0008}
+body[data-theme=gold]{}
+body[data-theme=parchment]{--bg:#f3e8cf;--bg2:#e4d2a6;--fg:#3a2a14;--accent:#8a4b12;--muted:#7d6a47;--bar:#fff8}
+body[data-theme=midnight]{--bg:#050b1f;--bg2:#12275a;--fg:#e9f0ff;--accent:#7fb0ff;--muted:#8fa3cc;--rf:'Trebuchet MS',Segoe UI,sans-serif;--vf:'Trebuchet MS',Segoe UI,sans-serif}
+body[data-theme=forest]{--bg:#06150d;--bg2:#14472a;--fg:#eaf6ea;--accent:#8fe0a0;--muted:#8db89a}
+body[data-theme=royal]{--bg:#150724;--bg2:#4a1d7a;--fg:#f6ecff;--accent:#e6b7ff;--muted:#b79ad1}
+body[data-theme=sunrise]{--bg:#2b0d12;--bg2:#d9622b;--fg:#fff6ea;--accent:#ffd166;--muted:#ffd9b0;--rf:'Trebuchet MS',Segoe UI,sans-serif;--vf:Georgia,serif}
+body[data-theme=clean]{--bg:#ffffff;--bg2:#eef1f5;--fg:#111827;--accent:#2563eb;--muted:#6b7280;--rf:Segoe UI,Arial,sans-serif;--vf:Segoe UI,Arial,sans-serif;--bar:#fffc}
+body[data-theme=projector]{--bg:#000;--bg2:#000;--fg:#fff;--accent:#ffd400;--muted:#888;--rf:Arial,Helvetica,sans-serif;--vf:Arial,Helvetica,sans-serif}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:radial-gradient(ellipse at 50% 30%,var(--bg2),var(--bg) 70%);color:var(--fg);font-family:var(--vf);overflow:hidden}
+#stage{height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4vh 6vw 14vh;text-align:center;transition:opacity .25s}
+#stage.swap{opacity:0}
+#ref{font-family:var(--rf);color:var(--accent);font-weight:700;font-size:calc(7vw*var(--scale,1));letter-spacing:.02em;line-height:1.1;margin-bottom:3vh;text-shadow:0 2px 20px #0005}
+#ref.small{font-size:calc(4vw*var(--scale,1))}
+#text{font-family:var(--vf);line-height:1.4;max-width:92vw}
+#text sup{color:var(--accent);font-size:.5em;margin:0 .25em 0 .5em;font-weight:700}
+#text.hidden{display:none}
+#bar{position:fixed;left:0;right:0;bottom:0;background:var(--bar);backdrop-filter:blur(8px);padding:10px 14px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;font:14px Segoe UI,Arial,sans-serif;color:var(--fg);z-index:5;transition:transform .25s}
+body.nobar #bar{transform:translateY(110%)}
+#bar button,#bar select,#bar input[type=text]{font:inherit;padding:7px 12px;border-radius:8px;border:1px solid #8885;background:#fff2;color:inherit;cursor:pointer}
+#bar select option{color:#000}
+#bar input[type=text]{cursor:text;width:200px}
+#mic.on{background:#d33;border-color:#d33;color:#fff}
+#dot{width:10px;height:10px;border-radius:50%;background:#777;display:inline-block;margin-right:6px}
+#dot.on{background:#3d3;box-shadow:0 0 8px #3d3}
+.sw{width:22px;height:22px;border-radius:50%;border:2px solid #fff8;padding:0!important;cursor:pointer}
+label{display:flex;align-items:center;gap:5px;cursor:pointer}
+#heard{position:fixed;top:8px;left:12px;right:12px;font:14px Segoe UI,Arial;color:var(--muted);text-align:left;display:none}
+#msg{position:fixed;top:8px;right:12px;font:13px Segoe UI,Arial;color:var(--muted)}
+#loader{position:fixed;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;gap:12px;background:#000d;color:#fff;font:18px Segoe UI,Arial;z-index:9;text-align:center;padding:20px}
+.grow{flex:1}
+</style>
+</head>
+<body data-theme="gold">
+<div id="heard"></div>
+<div id="msg">Loading Bible…</div>
+<div id="stage"><div id="ref">Ready</div><div id="text"></div></div>
+
+<div id="loader">
+  <div>bible.json could not be loaded automatically.</div>
+  <div style="font-size:15px;opacity:.8">Choose your bible.json file below (or open this page through http://localhost:8000).</div>
+  <input type="file" id="file" accept=".json">
+</div>
+
+<div id="bar">
+  <button id="mic" title="Start / stop listening (M)"><span id="dot"></span>Start listening</button>
+  <select id="lang" title="Speech language">
+    <option value="en-IN">English (India)</option>
+    <option value="en-US">English (US)</option>
+    <option value="en-GB">English (UK)</option>
+  </select>
+  <input type="text" id="manual" placeholder="Type: John 3:16 then Enter">
+  <button id="prev" title="Previous verse (←)">◀ Verse</button>
+  <button id="next" title="Next verse (→)">Verse ▶</button>
+  <span id="themes"></span>
+  <label>Size <input type="range" id="size" min="0.5" max="1.6" step="0.05" value="1"></label>
+  <label><input type="checkbox" id="showText" checked> Verse text</label>
+  <label title="Update while the pastor is still speaking (faster, but may flicker)"><input type="checkbox" id="fast"> Fast mode</label>
+  <label><input type="checkbox" id="debug"> Show heard words</label>
+  <span class="grow"></span>
+  <button id="full" title="Fullscreen (F)">⛶</button>
+  <button id="hide" title="Hide this bar (H)">Hide bar</button>
+</div>
+
+<script>
+//<core>
+let BOOKS=[],ALIAS=new Map(),SINGLES=[];
+const NUM={zero:0,one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,eleven:11,twelve:12,thirteen:13,fourteen:14,fifteen:15,sixteen:16,seventeen:17,eighteen:18,nineteen:19};
+const TENS={twenty:20,thirty:30,forty:40,fourty:40,fifty:50,sixty:60,seventy:70,eighty:80,ninety:90};
+function wtype(x){ if(x==='hundred')return 'H'; if(x in TENS)return 'T'; if(x in NUM)return NUM[x]>=10?'t':'u'; return null; }
+function okNext(l,n){ if(l===null)return true; if(l==='u')return n==='H'; if(l==='t')return false; if(l==='T')return n==='u'; if(l==='H')return n!=='H'; return false; }
+function wordsToNums(tk){
+  const out=[];let i=0;
+  while(i<tk.length){
+    if(!wtype(tk[i])){out.push(tk[i]);i++;continue}
+    let cur=0,last=null,j=i;
+    while(j<tk.length){
+      const x=tk[j];let ty=wtype(x);
+      if(!ty&&x==='and'&&last==='H'&&j+1<tk.length&&wtype(tk[j+1])){j++;continue}
+      if(!ty||!okNext(last,ty))break;
+      if(ty==='H')cur=(cur||1)*100;else cur+=(x in NUM?NUM[x]:TENS[x]);
+      last=ty;j++;
+    }
+    out.push(String(cur));i=j;
+  }
+  return out;
+}
+function normName(n){
+  n=String(n).toLowerCase().replace(/^the book of\s+/,'').replace(/^(iii|ii|i)\s+(?=[a-z])/,m=>({'i ':'1 ','ii ':'2 ','iii ':'3 '}[m]||m));
+  n=n.replace(/^([123])(?=[a-z])/,'$1 ').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
+  return n;
+}
+function buildAliases(){
+  ALIAS=new Map();
+  const add=(k,i)=>{if(!ALIAS.has(k))ALIAS.set(k,i)};
+  BOOKS.forEach((bk,idx)=>{
+    const base=normName(bk.name);add(base,idx);
+    const m=base.match(/^([123]) (.+)$/);
+    if(m){({1:['first','1st'],2:['second','2nd'],3:['third','3rd']})[m[1]].forEach(o=>add(o+' '+m[2],idx))}
+    const ex={psalms:['psalm','psalm of david'],revelation:['revelations','revelation of john'],'song of solomon':['song of songs','songs of solomon','song of salomon'],'song of songs':['song of solomon'],acts:['acts of the apostles'],'ecclesiastes':['ecclesiastics']}[base];
+    if(ex)ex.forEach(e=>add(e,idx));
+  });
+  SINGLES=[...ALIAS.keys()].filter(k=>!k.includes(' ')&&k.length>=5);
+}
+function lev(a,b){const d=[];for(let i=0;i<=a.length;i++){d[i]=[i]}for(let j=1;j<=b.length;j++)d[0][j]=j;
+  for(let i=1;i<=a.length;i++)for(let j=1;j<=b.length;j++)d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+(a[i-1]===b[j-1]?0:1));return d[a.length][b.length]}
+function matchBook(t,i){
+  for(let len=3;len>=1;len--){
+    if(i+len>t.length)continue;
+    const k=t.slice(i,i+len).join(' ');
+    if(ALIAS.has(k))return{b:ALIAS.get(k),len};
+  }
+  const w=t[i];
+  if(w&&w.length>=5&&!/^\d+$/.test(w)){
+    for(const s of SINGLES){ if(Math.abs(s.length-w.length)<=1&&lev(s,w)<=1)return{b:ALIAS.get(s),len:1}; }
+  }
+  return null;
+}
+const isNum=x=>/^\d+$/.test(x||'');
+function navVerse(st,dir){
+  if(st.b==null)return;
+  const bk=BOOKS[st.b];
+  if(dir>0){ if(st.v<bk.ch[st.c-1].length)st.v++; else if(st.c<bk.ch.length){st.c++;st.v=1} }
+  else { if(st.v>1)st.v--; else if(st.c>1){st.c--;st.v=bk.ch[st.c-1].length} }
+  st.ve=null;
+}
+function navChapter(st,dir){
+  if(st.b==null)return;
+  const bk=BOOKS[st.b];
+  const c=st.c+dir; if(c>=1&&c<=bk.ch.length){st.c=c;st.v=1;st.ve=null}
+}
+function parse(text,base){
+  let s=String(text).toLowerCase().replace(/(\d+)\s*[:.]\s*(\d+)/g,' chapter $1 verse $2 ').replace(/[^a-z0-9\s-]/g,' ').replace(/-/g,' to ');
+  const t=wordsToNums(s.split(/\s+/).filter(Boolean));
+  let st={...base};let bare=null;let i=0;
+  const setCh=n=>{if(st.b!=null&&n>=1&&n<=BOOKS[st.b].ch.length){st.c=n;st.v=1;st.ve=null;return true}return false};
+  const setV=n=>{if(st.b==null)return false;const mx=BOOKS[st.b].ch[st.c-1].length;if(n>=1&&n<=mx){st.v=n;st.ve=null;return true}return false};
+  while(i<t.length){
+    const w=t[i];
+    const m=matchBook(t,i);
+    if(m){
+      let j=i+m.len;if(t[j]==='chapter'||t[j]==='chapters')j++;
+      if(isNum(t[j])){
+        const prev={...st};st.b=m.b;st.c=1;st.v=1;st.ve=null;
+        if(setCh(+t[j])){bare='verse';i=j+1;continue}
+        st=prev;
+      }
+      i++;continue;
+    }
+    if(w==='chapter'&&isNum(t[i+1])){ if(setCh(+t[i+1]))bare='verse'; i+=2;continue; }
+    if(/^(verse|verses|versus|vs)$/.test(w)&&isNum(t[i+1])){
+      let j=i+2;
+      if(setV(+t[i+1])){
+        bare=null;
+        if(/^(to|through|till|until)$/.test(t[j])&&isNum(t[j+1])){
+          const e=+t[j+1];if(e>st.v&&e<=BOOKS[st.b].ch[st.c-1].length)st.ve=e;j+=2;
+        }
+      }
+      i=j;continue;
+    }
+    if(w==='next'&&(t[i+1]==='verse'||t[i+1]==='chapter')){ t[i+1]==='verse'?navVerse(st,1):navChapter(st,1); bare=null;i+=2;continue }
+    if((w==='previous'||w==='last'||w==='back')&&(t[i+1]==='verse'||t[i+1]==='chapter')){ t[i+1]==='verse'?navVerse(st,-1):navChapter(st,-1); bare=null;i+=2;continue }
+    if(w==='go'&&t[i+1]==='back'){ navVerse(st,-1);bare=null;i+=2;continue }
+    if(isNum(w)&&bare==='verse'){ if(setV(+w))bare=null; i++;continue }
+    i++;
+  }
+  return st;
+}
+//</core>
+//<loader>
+function chapterToArr(c){
+  if(Array.isArray(c)){
+    if(c.length&&typeof c[0]==='object'&&c[0]&&('verse' in c[0]||'num' in c[0]||'number' in c[0])){
+      const a=[];c.forEach((v,i)=>{const n=+(v.verse??v.num??v.number)||i+1;a[n-1]=v.text||v.verse_text||''});return Array.from(a,x=>x||'');
+    }
+    return c.map(v=>typeof v==='string'?v:(v&&(v.text||v.verse_text))||'');
+  }
+  if(c&&typeof c==='object'){
+    if(c.verses)return chapterToArr(c.verses);
+    const keys=Object.keys(c).filter(k=>/^\d+$/.test(k)).sort((a,b)=>a-b);
+    const a=[];keys.forEach(k=>{a[+k-1]=typeof c[k]==='string'?c[k]:(c[k]&&c[k].text)||''});
+    return Array.from(a,x=>x||'');
+  }
+  return [];
+}
+function normalizeBible(raw){
+  const out=[];
+  const push=(name,chs)=>{const ch=chs.map(chapterToArr).filter(a=>a.length);if(name&&ch.length)out.push({name:String(name),ch})};
+  if(Array.isArray(raw)){
+    raw.forEach(b=>push(b.name||b.book||b.book_name||b.title||b.abbrev,b.chapters||b.chapter||[]));
+  }else if(raw&&typeof raw==='object'){
+    if(raw.books)return normalizeBible(raw.books);
+    const keys=Object.keys(raw);
+    if(keys.length&&keys.every(k=>/^.+\s\d+:\d+$/.test(k))){
+      const tmp={};
+      keys.forEach(k=>{const m=k.match(/^(.+)\s(\d+):(\d+)$/);(tmp[m[1]]??={});(tmp[m[1]][m[2]]??={});tmp[m[1]][m[2]][m[3]]=raw[k]});
+      return normalizeBible(tmp);
+    }
+    keys.forEach(k=>{
+      const v=raw[k];
+      let chs;
+      if(Array.isArray(v))chs=v;
+      else if(v&&v.chapters)chs=Array.isArray(v.chapters)?v.chapters:Object.keys(v.chapters).filter(x=>/^\d+$/.test(x)).sort((a,b)=>a-b).map(x=>v.chapters[x]);
+      else if(v&&typeof v==='object')chs=Object.keys(v).filter(x=>/^\d+$/.test(x)).sort((a,b)=>a-b).map(x=>v[x]);
+      else chs=[];
+      push(k,chs);
+    });
+  }
+  return out;
+}
+//</loader>
+if(typeof document!=='undefined'){
+const $=id=>document.getElementById(id);
+let state={b:null,c:1,v:1,ve:null};
+const THEMES=[['gold','#e0b64f'],['parchment','#e4d2a6'],['midnight','#12275a'],['forest','#14472a'],['royal','#4a1d7a'],['sunrise','#d9622b'],['clean','#ffffff'],['projector','#000000']];
+function save(k,v){try{localStorage.setItem('pvd_'+k,v)}catch(e){}}
+function load(k){try{return localStorage.getItem('pvd_'+k)}catch(e){return null}}
+
+// themes
+THEMES.forEach(([n,c])=>{const b=document.createElement('button');b.className='sw';b.style.background=c;b.title=n;b.onclick=()=>setTheme(n);$('themes').appendChild(b)});
+function setTheme(n){document.body.dataset.theme=n;save('theme',n)}
+if(load('theme'))setTheme(load('theme'));
+
+// bible
+function ready(raw){
+  BOOKS=normalizeBible(raw);buildAliases();
+  if(!BOOKS.length){$('msg').textContent='bible.json format not recognised';return}
+  $('msg').textContent=BOOKS.length+' books loaded';
+  $('loader').style.display='none';
+  try{const s=JSON.parse(load('state')||'null');if(s&&s.b!=null&&BOOKS[s.b]&&BOOKS[s.b].ch[s.c-1]){state=s}}catch(e){}
+  render(true);
+}
+fetch('bible.json').then(r=>{if(!r.ok)throw 0;return r.json()}).then(ready).catch(()=>{$('loader').style.display='flex';$('msg').textContent=''});
+$('file').onchange=e=>{const f=e.target.files[0];if(!f)return;f.text().then(t=>ready(JSON.parse(t)))};
+
+// render
+let swapTimer;
+function render(instant){
+  const stage=$('stage');
+  const draw=()=>{
+    const r=$('ref'),tx=$('text');
+    if(state.b==null){r.textContent='Ready';r.className='';tx.textContent='';return}
+    const bk=BOOKS[state.b];
+    r.textContent=bk.name+' '+state.c+':'+state.v+(state.ve?'–'+state.ve:'');
+    const end=state.ve||state.v;let html=[];
+    tx.textContent='';
+    let len=0;
+    for(let v=state.v;v<=end;v++){
+      const t=bk.ch[state.c-1][v-1]||'';len+=t.length;
+      if(end>state.v){const sp=document.createElement('sup');sp.textContent=v;tx.appendChild(sp)}
+      tx.appendChild(document.createTextNode(t+' '));
+    }
+    const base=len<80?4.4:len<160?3.6:len<260?3:len<400?2.4:len<600?1.9:1.5;
+    tx.style.fontSize='calc('+base+'vw*var(--scale,1))';
+    r.className=$('showText').checked?'':'';
+    tx.className=$('showText').checked?'':'hidden';
+  };
+  if(instant){draw();return}
+  stage.classList.add('swap');clearTimeout(swapTimer);
+  swapTimer=setTimeout(()=>{draw();stage.classList.remove('swap')},180);
+}
+function setState(ns){
+  const changed=JSON.stringify(ns)!==JSON.stringify(state);
+  state=ns;baseState={...state};save('state',JSON.stringify(state));
+  if(changed)render();
+}
+$('size').oninput=e=>{document.documentElement.style.setProperty('--scale',e.target.value);save('size',e.target.value)};
+if(load('size')){$('size').value=load('size');document.documentElement.style.setProperty('--scale',load('size'))}
+$('showText').onchange=()=>{render(true);save('showText',$('showText').checked?1:0)};
+if(load('showText')==='0')$('showText').checked=false;
+$('debug').onchange=()=>{$('heard').style.display=$('debug').checked?'block':'none'};
+
+// manual controls
+$('manual').addEventListener('keydown',e=>{if(e.key==='Enter'){setState(parse(e.target.value,state));e.target.value=''}});
+$('prev').onclick=()=>{const s={...state};navVerse(s,-1);setState(s)};
+$('next').onclick=()=>{const s={...state};navVerse(s,1);setState(s)};
+document.addEventListener('keydown',e=>{
+  if(/INPUT|SELECT/.test(document.activeElement.tagName)&&document.activeElement.type!=='range'&&document.activeElement.type!=='checkbox')return;
+  const s={...state};
+  if(e.key==='ArrowRight'){navVerse(s,1);setState(s)}
+  else if(e.key==='ArrowLeft'){navVerse(s,-1);setState(s)}
+  else if(e.key==='PageDown'||e.key==='ArrowDown'){navChapter(s,1);setState(s)}
+  else if(e.key==='PageUp'||e.key==='ArrowUp'){navChapter(s,-1);setState(s)}
+  else if(e.key==='h'||e.key==='H')$('hide').click();
+  else if(e.key==='f'||e.key==='F')$('full').click();
+  else if(e.key==='m'||e.key==='M')$('mic').click();
+});
+$('hide').onclick=()=>{document.body.classList.toggle('nobar')};
+document.addEventListener('mousemove',e=>{if(document.body.classList.contains('nobar')&&e.clientY>innerHeight-40)document.body.classList.remove('nobar')});
+$('full').onclick=()=>{document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen()};
+
+// speech
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+let rec=null,listening=false,baseState={...state},startIdx=0;
+function startRec(){
+  rec=new SR();rec.continuous=true;rec.interimResults=true;rec.lang=$('lang').value;rec.maxAlternatives=1;
+  baseState={...state};startIdx=0;
+  rec.onresult=e=>{
+    let txt='',allFinal=true;
+    for(let i=startIdx;i<e.results.length;i++){txt+=' '+e.results[i][0].transcript;if(!e.results[i].isFinal)allFinal=false}
+    $('heard').textContent=txt.trim();
+    if(allFinal){const ns=parse(txt,baseState);startIdx=e.results.length;baseState=ns;setState(ns)}
+    else if($('fast').checked){const ns=parse(txt,baseState);if(JSON.stringify(ns)!==JSON.stringify(state)){state=ns;render()}}
+  };
+  rec.onerror=e=>{
+    if(e.error==='not-allowed'||e.error==='service-not-allowed'){listening=false;updMic();$('msg').textContent='Microphone blocked. Allow it in the browser address bar.'}
+    else if(e.error==='network'){$('msg').textContent='Speech needs internet'}
+  };
+  rec.onend=()=>{if(listening)setTimeout(()=>{if(listening)startRec()},250)};
+  try{rec.start()}catch(e){}
+}
+function updMic(){$('mic').classList.toggle('on',listening);$('dot').classList.toggle('on',listening);$('mic').lastChild.textContent=listening?'Listening… (stop)':'Start listening'}
+$('mic').onclick=()=>{
+  if(!SR){$('msg').textContent='Please use Google Chrome or Edge for voice.';return}
+  if(!BOOKS.length){$('msg').textContent='Bible not loaded yet';return}
+  listening=!listening;updMic();
+  if(listening){$('msg').textContent='';startRec()}else{try{rec&&rec.stop()}catch(e){}}
+};
+$('lang').onchange=()=>{save('lang',$('lang').value);if(listening){try{rec.stop()}catch(e){}}};
+if(load('lang'))$('lang').value=load('lang');
+$('mic').lastChild.textContent='Start listening';
+}
+</script>
+</body>
+</html>

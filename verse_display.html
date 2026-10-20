@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Verse Display</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Lora:wght@500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#2a0f14;--bg2:#4a1a22;--fg:#f6ecd9;--accent:#e2b756;--font:'Cormorant Garamond',Georgia,serif;}
+body[data-t="2"]{--bg:#f7f3ea;--bg2:#e9e1cf;--fg:#1d2a44;--accent:#9a6b1e;}
+body[data-t="3"]{--bg:#0b1f3a;--bg2:#1c4a78;--fg:#eaf3fb;--accent:#8fd0ff;--font:'Lora',Georgia,serif;}
+body[data-t="4"]{--bg:#16301f;--bg2:#2f5a3a;--fg:#f2f0df;--accent:#c9d96b;--font:'Lora',Georgia,serif;}
+body[data-t="5"]{--bg:#000;--bg2:#15151a;--fg:#fff;--accent:#ffd34d;}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%}
+body{background:radial-gradient(ellipse at 50% 30%,var(--bg2),var(--bg) 70%);color:var(--fg);font-family:var(--font);display:flex;align-items:center;justify-content:center;overflow:hidden;transition:background .6s}
+#stage{width:min(1100px,90vw);text-align:center}
+#ref{font-size:clamp(28px,4.5vw,64px);font-weight:600;color:var(--accent);letter-spacing:.02em;margin-bottom:.5em;opacity:0}
+#rule{width:90px;height:2px;background:var(--accent);margin:0 auto 1.2em;opacity:0}
+#txt{font-size:clamp(24px,4vw,56px);line-height:1.4;font-weight:500;opacity:0}
+.in{animation:fade 1s ease forwards}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+@media(prefers-reduced-motion:reduce){.in{animation-duration:.01s}}
+#panel{position:fixed;top:12px;left:12px;background:rgba(0,0,0,.72);color:#fff;font:14px system-ui,sans-serif;padding:10px;border-radius:8px;display:flex;flex-direction:column;gap:8px;max-width:280px;z-index:5}
+#panel input,#panel button{font:inherit;padding:6px 8px;border-radius:6px;border:1px solid #666;background:#222;color:#fff}
+#panel button{cursor:pointer}
+#panel button:focus-visible,#panel input:focus-visible{outline:2px solid #ffd34d}
+#themes{display:flex;gap:6px}
+#themes button{flex:1}
+#msg{font-size:12px;min-height:16px;color:#ffb4b4}
+small{opacity:.7}
+</style>
+</head>
+<body data-t="1">
+<div id="stage"><div id="ref"></div><div id="rule"></div><div id="txt"></div></div>
+
+<div id="panel">
+  <form id="f" style="display:flex;gap:6px">
+    <input id="q" placeholder="John 3:16" aria-label="Verse" style="flex:1;min-width:0">
+    <button>Show</button>
+  </form>
+  <div id="themes" role="group" aria-label="Theme">
+    <button data-t="1">1</button><button data-t="2">2</button><button data-t="3">3</button><button data-t="4">4</button><button data-t="5">5</button>
+  </div>
+  <button id="load">Load bible.json</button>
+  <input type="file" id="file" accept=".json" hidden>
+  <div id="msg"></div>
+  <small>Press H to hide this panel. Themes: Sanctuary, Daybreak, Still Waters, Olive Grove, Midnight.</small>
+</div>
+
+<script>
+var bible={
+"John 3:16":"For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life.",
+"John 3:17":"For God sent not his Son into the world to condemn the world; but that the world through him might be saved.",
+"Psalms 23:1":"The LORD is my shepherd; I shall not want.",
+"Romans 8:28":"And we know that all things work together for good to them that love God, to them who are the called according to his purpose.",
+"Philippians 4:13":"I can do all things through Christ which strengtheneth me.",
+"Isaiah 41:10":"Fear thou not; for I am with thee: be not dismayed; for I am thy God: I will strengthen thee; yea, I will help thee; yea, I will uphold thee with the right hand of my righteousness."
+};
+var idx={};
+function build(){idx={};Object.keys(bible).forEach(function(k){idx[k.toLowerCase()]=k;});}
+build();
+var ref=document.getElementById('ref'),rule=document.getElementById('rule'),txt=document.getElementById('txt'),msg=document.getElementById('msg'),q=document.getElementById('q');
+var timer;
+function fit(n){txt.style.fontSize=n>220?'clamp(20px,3vw,40px)':n>120?'clamp(22px,3.5vw,48px)':'';}
+function show(key){
+  clearTimeout(timer);
+  [ref,rule,txt].forEach(function(e){e.classList.remove('in');e.style.opacity=0;});
+  ref.textContent=key;txt.textContent=bible[key];fit(bible[key].length);
+  void ref.offsetWidth;
+  ref.classList.add('in');rule.classList.add('in');
+  timer=setTimeout(function(){txt.classList.add('in');},700);
+}
+function find(s){
+  s=s.toLowerCase().replace(/\s+/g,' ').trim();
+  if(idx[s])return idx[s];
+  var t=s.replace(/^psalm /,'psalms ');
+  return idx[t]||null;
+}
+document.getElementById('f').onsubmit=function(e){
+  e.preventDefault();
+  var k=find(q.value);
+  if(k){msg.textContent='';show(k);}else{msg.textContent='Verse not found. Try John 3:16, or load bible.json.';}
+};
+function theme(n){document.body.dataset.t=n;}
+document.querySelectorAll('#themes button').forEach(function(b){b.onclick=function(){theme(b.dataset.t);};});
+document.getElementById('load').onclick=function(){document.getElementById('file').click();};
+document.getElementById('file').onchange=function(e){
+  var r=new FileReader();
+  r.onload=function(){
+    try{bible=JSON.parse(r.result);build();msg.style.color='#b4ffc4';msg.textContent='Loaded '+Object.keys(bible).length+' verses';}
+    catch(x){msg.style.color='#ffb4b4';msg.textContent='Could not read that file.';}
+  };
+  r.readAsText(e.target.files[0]);
+};
+document.addEventListener('keydown',function(e){
+  if(e.target===q)return;
+  if(e.key==='h'||e.key==='H')document.getElementById('panel').hidden=!document.getElementById('panel').hidden;
+  if(e.key>='1'&&e.key<='5')theme(e.key);
+});
+if(location.protocol.indexOf('http')===0){
+  fetch('bible.json').then(function(r){return r.json();}).then(function(j){bible=j;build();}).catch(function(){});
+  var last=0;
+  setInterval(function(){
+    fetch('/current',{cache:'no-store'}).then(function(r){return r.json();}).then(function(c){
+      if(c.n!==last){last=c.n;if(c.ref&&bible[c.ref])show(c.ref);}
+    }).catch(function(){});
+  },400);
+}
+window.showVerse=function(s){var k=find(s);if(k)show(k);return !!k;};
+</script>
+</body>
+</html>
